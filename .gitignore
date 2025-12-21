@@ -1,0 +1,17 @@
+# Build outputs
+Debug/
+Release/
+
+# STM32CubeIDE / Eclipse
+.metadata/
+.settings/
+.project
+.cproject
+
+# Logs / temp
+*.launch
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
