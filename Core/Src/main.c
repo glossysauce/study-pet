@@ -206,9 +206,11 @@ int main(void)
  	  //MENU state
  	  static uint8_t menuPrint = 0;
  	  if (state == MENU && !menuPrint){
- 		 focused_ms = distracted_ms = distracted_episodes = 0;
- 		     in_distracted = 0;
- 		     last_ms = HAL_GetTick();
+		    focused_ms = 0;
+		    distracted_ms = 0;
+		    distracted_episodes = 0;
+		    in_distracted = 0;
+		    last_ms = HAL_GetTick();
  		     HAL_UART_Transmit(&huart2,(uint8_t*)"MENU\r\n",15,HAL_MAX_DELAY);
 // 		     state = FOCUSED;
  		     menuPrint = 1;
@@ -218,7 +220,7 @@ int main(void)
  		  menuPrint = 0;
  	  }
  	  //change the states
- 	 if (line_ready && (state == FOCUSED || state == DISTRACTED)){
+ 	 if (line_ready){
  		 HAL_UART_Transmit(&huart2, (uint8_t*)"ACK\r\n", 5, HAL_MAX_DELAY);
  		  line_ready = 0;
  		  //line + newline
@@ -228,13 +230,13 @@ int main(void)
  	        if (!strcmp(line_buf, "FOCUSED")) {
  	        	if(in_distracted){
  		        	state = FOCUSED;
-// 		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=FOCUSED\r\n", 15, HAL_MAX_DELAY);
+ 		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=FOCUSED\r\n", 15, HAL_MAX_DELAY);
  		            in_distracted = 0;
  	        	}
  	        } else if (!strcmp(line_buf, "DISTRACTED")) {
  	        	if(!in_distracted){
  		        	state = DISTRACTED;
-// 		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=DISTRACTED\r\n", 18, HAL_MAX_DELAY);
+ 		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=DISTRACTED\r\n", 18, HAL_MAX_DELAY);
 
  		        	if(!in_distracted){
  		        		distracted_episodes++;
@@ -464,6 +466,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 			}
 			else if(state == MENU){
 				state = FOCUSED;
+				line_ready = 0;
+				line_len = 0;
+				line_buf[0] = '\0';
 				printf("start \n\r");
 			}
 			else if (state == FOCUSED){
