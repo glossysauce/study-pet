@@ -71,6 +71,11 @@ static volatile uint8_t end_session_flag = 0;
 static volatile uint8_t idle_flag = 0;
 uint8_t endTrack = 0;
 
+static uint32_t idleFlag = 0;
+static uint32_t focusedFlag = 0;
+static uint32_t menuFlag = 0;
+static uint32_t endFlag = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -142,6 +147,34 @@ int main(void)
     /* USER CODE END WHILE */
  //	  printf("hello world \n\r");
  //	  HAL_Delay(1000);
+
+	  //interrupt state changes handled here
+	  if (idleFlag){
+		  state = IDLE;
+		  idleFlag = 0;
+		  printf("idle\n\r");
+	  }
+	  else if (focusedFlag){
+		  state = FOCUSED;
+		  focusedFlag = 0;
+			line_ready = 0;
+			line_len = 0;
+			line_buf[0] = '\0';
+		  printf("focused\n\r");
+	  }
+	  else if (menuFlag){
+	  		  state = MENU;
+	  		  menuFlag = 0;
+	  		printf("menu\n\r");
+	  	  }
+	  else if (endFlag){
+	  		  state = END;
+	  		  endFlag = 0;
+	  		printf("end\n\r");
+	  	  }
+
+
+
  	  uint32_t now = HAL_GetTick();
  	  //init
  	  if(last_ms == 0){
@@ -251,7 +284,7 @@ int main(void)
  	        line_len = 0;
  	  }
     /* USER CODE BEGIN 3 */
-
+ 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
   }
   /* USER CODE END 3 */
  }
@@ -438,22 +471,22 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 static uint32_t last_pb5 = 0;
 static uint32_t last_pa8 = 0;
 
+
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	uint32_t button_now = HAL_GetTick();
 	//idle/break
     if (GPIO_Pin == GPIO_PIN_5) {
     	if(button_now - last_pb5 > 50){
-        	printf("idle \n\r");
         	if(state != IDLE){
-        		state = IDLE;
+        		idleFlag = 1;
         	}
-
         	else if(state == IDLE){
-        		printf("resuming \n\r");
-        		state = FOCUSED;
+        		focusedFlag = 1;
         	}
         	last_pb5 = button_now;
+        	HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
     	}
     }
     //start/stop session
@@ -461,21 +494,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     	if(button_now - last_pa8 > 50){
 
 			if(state == END){
-				state = MENU;
-				printf("menu \n\r");
+				menuFlag = 1;
 			}
 			else if(state == MENU){
-				state = FOCUSED;
-				line_ready = 0;
-				line_len = 0;
-				line_buf[0] = '\0';
-				printf("start \n\r");
+				focusedFlag = 1;
 			}
 			else if (state == FOCUSED){
-				state = END;
-				printf("end\n\r");
+				endFlag = 1;
 			}
 			last_pa8 = button_now;
+			HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
     	}
     }
 }
