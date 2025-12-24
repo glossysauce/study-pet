@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
+#include "oled.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -40,9 +40,13 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+SPI_HandleTypeDef hspi1;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+
+
 static uint8_t rx_byte;
 static char line_buf[128];
 static volatile uint16_t line_len = 0;
@@ -58,14 +62,29 @@ typedef enum State{
 
 static State_t state = MENU;
 
+typedef enum {
+	HAPPY,
+	NEUTRAL,
+	SAD,
+	DEAD,
+} petMood_t;
+
+static petMood_t mood = HAPPY;
+
+typedef enum {
+	DEFAULT,
+	TRIGGERED,
+	ANIMIDLE
+} petAnim_t;
+
+static petAnim_t anim = DEFAULT;
+
 static uint32_t last_ms = 0;
 static uint32_t focused_ms = 0;
 static uint32_t distracted_ms = 0;
 
 static uint32_t distracted_episodes = 0;
 static uint8_t in_distracted = 0;
-
-static uint32_t pet_health = 100;
 
 static volatile uint8_t end_session_flag = 0;
 static volatile uint8_t idle_flag = 0;
@@ -76,12 +95,14 @@ static uint32_t focusedFlag = 0;
 static uint32_t menuFlag = 0;
 static uint32_t endFlag = 0;
 
+static uint32_t pet_health = 100;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -133,162 +154,171 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   HAL_UART_Transmit(&huart2, (uint8_t*)"STM32 READY\r\n", 12, HAL_MAX_DELAY);
 
+  oled_reset();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  //	  printf("hello world \n\r");
+	  //	  HAL_Delay(1000);
+
+	  //oled testing
+//	  oled_off();
+//	  HAL_Delay(1000);
+//	  oled_on();
+//	  HAL_Delay(1000);
+
+
+	 	  //interrupt state changes handled here
+	 	  if (idleFlag){
+	 		  state = IDLE;
+	 		  idleFlag = 0;
+	 		  printf("idle\n\r");
+	 	  }
+	 	  else if (focusedFlag){
+	 		  state = FOCUSED;
+	 		  focusedFlag = 0;
+	 			line_ready = 0;
+	 			line_len = 0;
+	 			line_buf[0] = '\0';
+	 		  printf("focused\n\r");
+	 	  }
+	 	  else if (menuFlag){
+	 	  		  state = MENU;
+	 	  		  menuFlag = 0;
+	 	  		printf("menu\n\r");
+	 	  	  }
+	 	  else if (endFlag){
+	 	  		  state = END;
+	 	  		  endFlag = 0;
+	 	  		printf("end\n\r");
+	 	  	  }
+
+
+
+	  	  uint32_t now = HAL_GetTick();
+	  	  //init
+	  	  if(last_ms == 0){
+	  		  last_ms = now;
+	  	  }
+
+	  	 time_count(now);
+
+	  	  //display summary here, can be triggered by pin8 only
+	  	 static uint8_t endPrint = 0;
+
+	  	  if(state == END && !endPrint){
+
+	  		    char msg[128];
+	  		    snprintf(msg, sizeof(msg),
+	  		             "SESSION END\r\nFOCUSED=%lus\r\nDISTRACTED=%lus\r\nEPISODES=%lu\r\n",
+	  		             (unsigned long)(focused_ms/1000),
+	  		             (unsigned long)(distracted_ms/1000),
+	  		             (unsigned long)distracted_episodes);
+	  		    HAL_UART_Transmit(&huart2, (uint8_t*)msg, (uint16_t)strlen(msg), HAL_MAX_DELAY);
+
+
+	  		    //resetting
+
+	  		    focused_ms = 0;
+	  		    distracted_ms = 0;
+	  		    distracted_episodes = 0;
+	  		    in_distracted = 0;
+	  		    last_ms = HAL_GetTick();
+	 // 		    state = MENU;
+
+	  		    HAL_UART_Transmit(&huart2, (uint8_t*)"SESSION RESET\r\n", 15, HAL_MAX_DELAY);
+	  		    endPrint = 1;
+	 // 		    endTrack = 1;
+	  	  }
+
+	  	  if (state != END){
+	  		  endPrint = 0;
+	  	  }
+
+	  	  //idle state. triggered by pin5, exit using pin5 again
+	  	  static uint8_t idlePrint = 0;
+	  	  if (state == IDLE){
+	  		  if (!idlePrint){
+	  	 		 HAL_UART_Transmit(&huart2, (uint8_t*)"STUDYING PAUSED\r\n", 17, HAL_MAX_DELAY);
+
+	  			    char msg[128];
+	  			    snprintf(msg, sizeof(msg),
+	  			             "CURRENT STATS\r\nFOCUSED=%lus\r\nDISTRACTED=%lus\r\nEPISODES=%lu\r\n",
+	  			             (unsigned long)(focused_ms/1000),
+	  			             (unsigned long)(distracted_ms/1000),
+	  			             (unsigned long)distracted_episodes);
+	  			    HAL_UART_Transmit(&huart2, (uint8_t*)msg, (uint16_t)strlen(msg), HAL_MAX_DELAY);
+	  			    idlePrint = 1;
+	  		  }
+	  	  }
+
+	  	  if(state != IDLE){
+	  		  idlePrint = 0;
+	  	  }
+
+	  	  //MENU state
+	  	  static uint8_t menuPrint = 0;
+	  	  if (state == MENU && !menuPrint){
+	 		    focused_ms = 0;
+	 		    distracted_ms = 0;
+	 		    distracted_episodes = 0;
+	 		    in_distracted = 0;
+	 		    last_ms = HAL_GetTick();
+	  		     HAL_UART_Transmit(&huart2,(uint8_t*)"MENU\r\n",15,HAL_MAX_DELAY);
+	 // 		     state = FOCUSED;
+	  		     menuPrint = 1;
+	  	  }
+
+	  	  if (state != MENU){
+	  		  menuPrint = 0;
+	  	  }
+	  	  //change the states
+	  	 if (line_ready){
+	  		 HAL_UART_Transmit(&huart2, (uint8_t*)"ACK\r\n", 5, HAL_MAX_DELAY);
+	  		  line_ready = 0;
+	  		  //line + newline
+	  		  HAL_UART_Transmit(&huart2, (uint8_t*)"RX: ", 4, HAL_MAX_DELAY);
+	  		  HAL_UART_Transmit(&huart2, (uint8_t*)line_buf, (uint16_t)strlen(line_buf), HAL_MAX_DELAY);
+	  		  HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, HAL_MAX_DELAY);
+	  	        if (!strcmp(line_buf, "FOCUSED")) {
+	  	        	if(in_distracted){
+	  		        	state = FOCUSED;
+	  		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=FOCUSED\r\n", 15, HAL_MAX_DELAY);
+	  		            in_distracted = 0;
+	  	        	}
+	  	        } else if (!strcmp(line_buf, "DISTRACTED")) {
+	  	        	if(!in_distracted){
+	  		        	state = DISTRACTED;
+	  		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=DISTRACTED\r\n", 18, HAL_MAX_DELAY);
+
+	  		        	if(!in_distracted){
+	  		        		distracted_episodes++;
+	  		        	}
+
+	  		            in_distracted = 1;
+
+	  	        	}
+	  	        } else {
+	  	            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=UNKNOWN\r\n", 15, HAL_MAX_DELAY);
+	  	        }
+	  	        line_len = 0;
+	  	  }
     /* USER CODE END WHILE */
- //	  printf("hello world \n\r");
- //	  HAL_Delay(1000);
 
-	  //interrupt state changes handled here
-	  if (idleFlag){
-		  state = IDLE;
-		  idleFlag = 0;
-		  printf("idle\n\r");
-	  }
-	  else if (focusedFlag){
-		  state = FOCUSED;
-		  focusedFlag = 0;
-			line_ready = 0;
-			line_len = 0;
-			line_buf[0] = '\0';
-		  printf("focused\n\r");
-	  }
-	  else if (menuFlag){
-	  		  state = MENU;
-	  		  menuFlag = 0;
-	  		printf("menu\n\r");
-	  	  }
-	  else if (endFlag){
-	  		  state = END;
-	  		  endFlag = 0;
-	  		printf("end\n\r");
-	  	  }
-
-
-
- 	  uint32_t now = HAL_GetTick();
- 	  //init
- 	  if(last_ms == 0){
- 		  last_ms = now;
- 	  }
-
- 	 time_count(now);
-
- 	  //display summary here, can be triggered by pin8 only
- 	 static uint8_t endPrint = 0;
-
- 	  if(state == END && !endPrint){
-
- 		    char msg[128];
- 		    snprintf(msg, sizeof(msg),
- 		             "SESSION END\r\nFOCUSED=%lus\r\nDISTRACTED=%lus\r\nEPISODES=%lu\r\n",
- 		             (unsigned long)(focused_ms/1000),
- 		             (unsigned long)(distracted_ms/1000),
- 		             (unsigned long)distracted_episodes);
- 		    HAL_UART_Transmit(&huart2, (uint8_t*)msg, (uint16_t)strlen(msg), HAL_MAX_DELAY);
-
-
- 		    //resetting
-
- 		    focused_ms = 0;
- 		    distracted_ms = 0;
- 		    distracted_episodes = 0;
- 		    in_distracted = 0;
- 		    last_ms = HAL_GetTick();
-// 		    state = MENU;
-
- 		    HAL_UART_Transmit(&huart2, (uint8_t*)"SESSION RESET\r\n", 15, HAL_MAX_DELAY);
- 		    endPrint = 1;
-// 		    endTrack = 1;
- 	  }
-
- 	  if (state != END){
- 		  endPrint = 0;
- 	  }
-
- 	  //idle state. triggered by pin5, exit using pin5 again
- 	  static uint8_t idlePrint = 0;
- 	  if (state == IDLE){
- 		  if (!idlePrint){
- 	 		 HAL_UART_Transmit(&huart2, (uint8_t*)"STUDYING PAUSED\r\n", 17, HAL_MAX_DELAY);
-
- 			    char msg[128];
- 			    snprintf(msg, sizeof(msg),
- 			             "CURRENT STATS\r\nFOCUSED=%lus\r\nDISTRACTED=%lus\r\nEPISODES=%lu\r\n",
- 			             (unsigned long)(focused_ms/1000),
- 			             (unsigned long)(distracted_ms/1000),
- 			             (unsigned long)distracted_episodes);
- 			    HAL_UART_Transmit(&huart2, (uint8_t*)msg, (uint16_t)strlen(msg), HAL_MAX_DELAY);
- 			    idlePrint = 1;
- 		  }
- 	  }
-
- 	  if(state != IDLE){
- 		  idlePrint = 0;
- 	  }
-
- 	  //MENU state
- 	  static uint8_t menuPrint = 0;
- 	  if (state == MENU && !menuPrint){
-		    focused_ms = 0;
-		    distracted_ms = 0;
-		    distracted_episodes = 0;
-		    in_distracted = 0;
-		    last_ms = HAL_GetTick();
- 		     HAL_UART_Transmit(&huart2,(uint8_t*)"MENU\r\n",15,HAL_MAX_DELAY);
-// 		     state = FOCUSED;
- 		     menuPrint = 1;
- 	  }
-
- 	  if (state != MENU){
- 		  menuPrint = 0;
- 	  }
- 	  //change the states
- 	 if (line_ready){
- 		 HAL_UART_Transmit(&huart2, (uint8_t*)"ACK\r\n", 5, HAL_MAX_DELAY);
- 		  line_ready = 0;
- 		  //line + newline
- 		  HAL_UART_Transmit(&huart2, (uint8_t*)"RX: ", 4, HAL_MAX_DELAY);
- 		  HAL_UART_Transmit(&huart2, (uint8_t*)line_buf, (uint16_t)strlen(line_buf), HAL_MAX_DELAY);
- 		  HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, HAL_MAX_DELAY);
- 	        if (!strcmp(line_buf, "FOCUSED")) {
- 	        	if(in_distracted){
- 		        	state = FOCUSED;
- 		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=FOCUSED\r\n", 15, HAL_MAX_DELAY);
- 		            in_distracted = 0;
- 	        	}
- 	        } else if (!strcmp(line_buf, "DISTRACTED")) {
- 	        	if(!in_distracted){
- 		        	state = DISTRACTED;
- 		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=DISTRACTED\r\n", 18, HAL_MAX_DELAY);
-
- 		        	if(!in_distracted){
- 		        		distracted_episodes++;
- 		        	}
-
- 		            in_distracted = 1;
-
- 	        	}
- 	        } else {
- 	            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=UNKNOWN\r\n", 15, HAL_MAX_DELAY);
- 	        }
- 	        line_len = 0;
- 	  }
     /* USER CODE BEGIN 3 */
  	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
   }
   /* USER CODE END 3 */
- }
-
+}
 
 /**
   * @brief System Clock Configuration
@@ -337,6 +367,46 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 7;
+  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
 }
 
 /**
@@ -393,7 +463,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_6, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -401,18 +474,25 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
-
   /*Configure GPIO pin : PA8 */
   GPIO_InitStruct.Pin = GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PB3 PB4 PB6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
