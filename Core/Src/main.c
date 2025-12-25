@@ -18,10 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "oled.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ssd1331.h"
+#include "oled.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -156,11 +157,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-
-  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
-  HAL_UART_Transmit(&huart2, (uint8_t*)"STM32 READY\r\n", 12, HAL_MAX_DELAY);
-
-  oled_reset();
+oled_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -171,11 +168,46 @@ int main(void)
 	  //	  HAL_Delay(1000);
 
 	  //oled testing
+//	  oled_init();
 //	  oled_off();
 //	  HAL_Delay(1000);
 //	  oled_on();
 //	  HAL_Delay(1000);
 
+//	  oled_init();
+//	  oled_fill(0xF800); // red
+//	  HAL_Delay(1000);
+//	  oled_fill(0x07E0); // green
+//	  HAL_Delay(1000);
+//	  oled_fill(0x001F); // blue
+
+//	  oled_fill(0xFFFF);
+//	  HAL_Delay(5000);
+//	  oled_fill(0x0000);
+//	  HAL_Delay(5000);
+
+//	  oled_off();
+//	  HAL_Delay(300);
+//	  oled_on();
+//	  HAL_Delay(300);
+	  oled_clear_hw();
+	  HAL_Delay(1000);
+	  oled_rect_hw_red();
+	  HAL_Delay(1000);
+//	  SSD1331_Fill(0x0000);   // BLACK
+//	         HAL_Delay(500);
+//
+//	         SSD1331_Fill(0xF800);   // RED
+//	         HAL_Delay(500);
+//
+//	         SSD1331_Fill(0x07E0);   // GREEN
+//	         HAL_Delay(500);
+//
+//	         SSD1331_Fill(0x001F);   // BLUE
+//	         HAL_Delay(500);
+//
+//	         SSD1331_Fill(0xFFFF);   // WHITE
+//	         HAL_Delay(500);
 
 	 	  //interrupt state changes handled here
 	 	  if (idleFlag){
@@ -392,7 +424,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
