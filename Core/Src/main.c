@@ -156,11 +156,8 @@ int main(void)
   MX_USART2_UART_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-oled_init();
-oled_rect_hw_red();
-uint8_t x = 0;
-int8_t dx = 2;
 
+  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -169,54 +166,9 @@ int8_t dx = 2;
   {
 	  //	  printf("hello world \n\r");
 	  //	  HAL_Delay(1000);
-//	  test(); //working
-//	    oled_gac_fill_rect(0, 0, 95, 63, 255, 0, 0);
-//	    HAL_Delay(400);
-//
-//	    oled_gac_fill_rect(0, 0, 95, 63, 0, 255, 0);
-//	    HAL_Delay(400);
 
-//	    oled_gac_fill_rect(0, 0, 95, 63, 0, 0, 255);
-//	    HAL_Delay(400);
-
-	  static uint8_t prev = 0;
-
-	  oled_gac_fill_rect(prev, 20, prev + 15, 35, 0, 0, 0);   // erase old
-	  oled_gac_fill_rect(x,    20, x + 15,    35, 255,255,0); // draw new
-	  prev = x;
-
-	      x += dx;
-	      if (x == 0 || x + 15 >= 95) dx = -dx;
-
-	      HAL_Delay(40);
-	  //oled testing
-//	  oled_init();
-//	  oled_off();
-//	  HAL_Delay(1000);
-//	  oled_on();
-//	  HAL_Delay(1000);
-
-//	  oled_init();
-//	  oled_fill(0xF800); // red
-//	  HAL_Delay(1000);
-//	  oled_fill(0x07E0); // green
-//	  HAL_Delay(1000);
-//	  oled_fill(0x001F); // blue
-
-//	  oled_fill(0xFFFF);
-//	  HAL_Delay(5000);
-//	  oled_fill(0x0000);
-//	  HAL_Delay(5000);
-
-//	  oled_off();
-//	  HAL_Delay(300);
-//	  oled_on();
-//	  HAL_Delay(300);
-
-	  //working
-//	  oled_clear_hw();
-//	  HAL_Delay(1000);
-//	  oled_rect_hw_red();
+	  //buzzer testing
+//	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
 //	  HAL_Delay(1000);
 
 	 	  //interrupt state changes handled here
@@ -339,21 +291,28 @@ int8_t dx = 2;
 	  	        	}
 	  	        } else if (!strcmp(line_buf, "DISTRACTED")) {
 	  	        	if(!in_distracted){
-	  		        	state = DISTRACTED;
+
 	  		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=DISTRACTED\r\n", 18, HAL_MAX_DELAY);
 
 	  		        	if(!in_distracted){
 	  		        		distracted_episodes++;
 	  		        	}
-
+	  		        	state = DISTRACTED;
 	  		            in_distracted = 1;
-
 	  	        	}
 	  	        } else {
 	  	            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=UNKNOWN\r\n", 15, HAL_MAX_DELAY);
 	  	        }
 	  	        line_len = 0;
 	  	  }
+
+	  	 if (state == DISTRACTED){
+	  		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
+	  		HAL_Delay(500);
+	  	 }
+	  	 else{
+	  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, 0);
+	  	 }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -434,7 +393,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -507,9 +466,6 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_6, GPIO_PIN_RESET);
-
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
@@ -528,13 +484,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PB3 PB4 PB6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_6;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
@@ -614,7 +563,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     //start/stop session
     if (GPIO_Pin == GPIO_PIN_8) {
     	if(button_now - last_pa8 > 50){
-
 			if(state == END){
 				menuFlag = 1;
 			}
