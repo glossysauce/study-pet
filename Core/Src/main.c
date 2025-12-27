@@ -21,7 +21,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "ssd1331.h"
 #include "oled.h"
 /* USER CODE END Includes */
 
@@ -158,6 +157,10 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 oled_init();
+oled_rect_hw_red();
+uint8_t x = 0;
+int8_t dx = 2;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -166,7 +169,26 @@ oled_init();
   {
 	  //	  printf("hello world \n\r");
 	  //	  HAL_Delay(1000);
+//	  test(); //working
+//	    oled_gac_fill_rect(0, 0, 95, 63, 255, 0, 0);
+//	    HAL_Delay(400);
+//
+//	    oled_gac_fill_rect(0, 0, 95, 63, 0, 255, 0);
+//	    HAL_Delay(400);
 
+//	    oled_gac_fill_rect(0, 0, 95, 63, 0, 0, 255);
+//	    HAL_Delay(400);
+
+	  static uint8_t prev = 0;
+
+	  oled_gac_fill_rect(prev, 20, prev + 15, 35, 0, 0, 0);   // erase old
+	  oled_gac_fill_rect(x,    20, x + 15,    35, 255,255,0); // draw new
+	  prev = x;
+
+	      x += dx;
+	      if (x == 0 || x + 15 >= 95) dx = -dx;
+
+	      HAL_Delay(40);
 	  //oled testing
 //	  oled_init();
 //	  oled_off();
@@ -190,24 +212,12 @@ oled_init();
 //	  HAL_Delay(300);
 //	  oled_on();
 //	  HAL_Delay(300);
-	  oled_clear_hw();
-	  HAL_Delay(1000);
-	  oled_rect_hw_red();
-	  HAL_Delay(1000);
-//	  SSD1331_Fill(0x0000);   // BLACK
-//	         HAL_Delay(500);
-//
-//	         SSD1331_Fill(0xF800);   // RED
-//	         HAL_Delay(500);
-//
-//	         SSD1331_Fill(0x07E0);   // GREEN
-//	         HAL_Delay(500);
-//
-//	         SSD1331_Fill(0x001F);   // BLUE
-//	         HAL_Delay(500);
-//
-//	         SSD1331_Fill(0xFFFF);   // WHITE
-//	         HAL_Delay(500);
+
+	  //working
+//	  oled_clear_hw();
+//	  HAL_Delay(1000);
+//	  oled_rect_hw_red();
+//	  HAL_Delay(1000);
 
 	 	  //interrupt state changes handled here
 	 	  if (idleFlag){
@@ -430,7 +440,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi1.Init.CRCPolynomial = 7;
   hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
   {
     Error_Handler();
@@ -523,7 +533,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB5 */

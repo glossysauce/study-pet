@@ -56,11 +56,15 @@ static void cmd_args(uint8_t c, const uint8_t *args, int n){
 //[0-95] col
 //[0,63] row
 static void set_window(uint8_t x0, uint8_t x1, uint8_t y0, uint8_t y1){
-	uint8_t col[] = {x0, x1};
-	uint8_t row[] = {y0, y1};
+	  CS_LOW();
+	  oled_cmd(0x15);
+	  oled_data(x0);
+	  oled_data(x1);
 
-	cmd_args(0x15, col, 2);
-	cmd_args(0x75, row, 2);
+	  oled_cmd(0x75);
+	  oled_data(y0);
+	  oled_data(y1);
+	  CS_HIGH();
 }
 
 
@@ -74,7 +78,7 @@ void oled_init(void) {
     oled_reset();
 
     CS_LOW();
-    oled_cmd(0xAE);                 // display off
+    oled_cmd(0xAE);// display off
 
     oled_cmd(0xFD); oled_data(0x12); // unlock
 
@@ -91,7 +95,6 @@ void oled_init(void) {
     oled_cmd(0x8B); oled_data(0x60);
     oled_cmd(0x8C); oled_data(0x80);
 
-    oled_cmd(0xA0); oled_data(0x72); // remap 16-bit
     oled_cmd(0xA1); oled_data(0x00);
     oled_cmd(0xA2); oled_data(0x00);
 
@@ -109,7 +112,9 @@ void oled_init(void) {
     oled_cmd(0xBB); oled_data(0x3E);
     oled_cmd(0xBE); oled_data(0x3E);
 
-    oled_cmd(0xAF);                 // display on
+    oled_cmd(0xA0); oled_data(0x72); // remap 16-bit
+
+    oled_cmd(0xAF);// display on
     CS_HIGH();
 
     HAL_Delay(100);
@@ -138,33 +143,13 @@ void oled_fill(uint16_t color){
 
 }
 
-void oled_fill_fixed(uint16_t color){
-    CS_LOW();
+void oled_write_data(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint16_t *img){
+	oled_set_window(x, x+w-1, y, y+h-1);
+	  CS_LOW();
+	  oled_cmd(0x5C);
+	  HAL_GPIO_WritePin(DC_GPIO_Port, DC_Pin, GPIO_PIN_SET);
 
-    set_window(0, 95, 0, 63);
-    HAL_Delay(1);  // Small delay
 
-    // Send RAM write command
-    HAL_GPIO_WritePin(DC_GPIO_Port, DC_Pin, GPIO_PIN_RESET); // Command
-    uint8_t cmd = 0x5C;
-    HAL_SPI_Transmit(&hspi1, &cmd, 1, 100);
-    HAL_Delay(1);  // Small delay
-
-    // Switch to data mode
-    HAL_GPIO_WritePin(DC_GPIO_Port, DC_Pin, GPIO_PIN_SET); // Data
-
-    uint8_t hi = (color >> 8) & 0xFF;
-    uint8_t lo = color & 0xFF;
-
-    // Send just 10 pixels as test
-    for (int i = 0; i < 10; i++) {
-        uint8_t px[2] = {hi, lo};
-        HAL_SPI_Transmit(&hspi1, px, 2, 100);
-    }
-
-    CS_HIGH();
-
-    // If this shows ANY change, the rest will work
 }
 void oled_clear_window(void) {
     CS_LOW();
@@ -176,6 +161,10 @@ void oled_clear_window(void) {
     CS_HIGH();
 }
 
+//A = Blue
+//B = Green
+//C = Red
+//TEST
 void oled_rect_hw_red(void){
   CS_LOW();
   oled_cmd(0x26); oled_data(0x01);         // fill enable:contentReference[oaicite:4]{index=4}
@@ -191,20 +180,110 @@ void oled_rect_hw_red(void){
 //  oled_data(0xF8); oled_data(0x00);
 //  oled_data(0xF8); oled_data(0x00);
   // Outline color C,B,A  (set to red)
-  oled_data(0x00); // C
+  oled_data(0xFF); // C
   oled_data(0x00); // B
-  oled_data(0xFF); // A
+  oled_data(0x00); // A
 
-  // Fill color C,B,A (set to red)
-  oled_data(0xFF); // C   -> ?? (tell me)
+  // fill color C,B,A (set to red)
+  oled_data(0xFF); // C
   oled_data(0x00); // B
   oled_data(0x00); // A
   CS_HIGH();
 }
+
 void oled_clear_hw(void){
   uint8_t a[4] = {0,0,95,63};
   CS_LOW();
   oled_cmd(0x25);
   for(int i=0;i<4;i++) oled_data(a[i]);
+  CS_HIGH();
+}
+
+void oled_draw_pixel(uint8_t x, uint8_t y, uint16_t c){
+  CS_LOW();
+  oled_cmd(0x15); oled_data(x); oled_data(x);
+  oled_cmd(0x75); oled_data(y); oled_data(y);
+  oled_cmd(0x5C);
+  HAL_GPIO_WritePin(DC_GPIO_Port, DC_Pin, GPIO_PIN_SET);
+  uint8_t px[2] = { (uint8_t)(c>>8), (uint8_t)c };
+  HAL_SPI_Transmit(&hspi1, px, 2, HAL_MAX_DELAY);
+  CS_HIGH();
+}
+
+void oled_draw_block(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color)
+{
+    uint8_t hi = (uint8_t)(color >> 8);
+    uint8_t lo = (uint8_t)(color & 0xFF);
+
+    CS_LOW();
+
+    // Set window (CS stays low)
+    oled_cmd(0x15); oled_data(x);         oled_data(x + w - 1);
+    oled_cmd(0x75); oled_data(y);         oled_data(y + h - 1);
+
+    // Write RAM
+    oled_cmd(0x5C);
+    HAL_GPIO_WritePin(DC_GPIO_Port, DC_Pin, GPIO_PIN_SET);
+
+    // Stream pixels
+    uint8_t px[2] = {hi, lo};
+    for (int i = 0; i < w * h; i++) {
+        HAL_SPI_Transmit(&hspi1, px, 2, HAL_MAX_DELAY);
+    }
+
+    CS_HIGH();
+}
+
+void oled_block_rgb565(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color)
+{
+  uint8_t hi = (uint8_t)(color >> 8);
+  uint8_t lo = (uint8_t)(color & 0xFF);
+
+  CS_LOW();
+
+  oled_cmd(0x15); oled_data(x);       oled_data(x + w - 1);
+  oled_cmd(0x75); oled_data(y);       oled_data(y + h - 1);
+
+  oled_cmd(0x5C);                     // write RAM
+  HAL_GPIO_WritePin(DC_GPIO_Port, DC_Pin, GPIO_PIN_SET);
+
+  uint8_t buf[256];
+  for (int i = 0; i < 256; i += 2) { buf[i] = hi; buf[i+1] = lo; }
+
+  int bytes = w * h * 2;
+  while (bytes > 0) {
+    int n = (bytes > 256) ? 256 : bytes;
+    HAL_SPI_Transmit(&hspi1, buf, n, HAL_MAX_DELAY);
+    bytes -= n;
+  }
+
+  CS_HIGH();
+}
+
+//working
+void test(void){
+	  CS_LOW(); oled_cmd(0xA5); CS_HIGH(); // all ON
+	  HAL_Delay(800);
+	  CS_LOW(); oled_cmd(0xA6); CS_HIGH(); // all OFF
+	  HAL_Delay(800);
+	  CS_LOW(); oled_cmd(0xA4); CS_HIGH(); // normal
+	  HAL_Delay(200);
+}
+
+static inline void gac_color_rgb(uint8_t r,uint8_t g,uint8_t b){
+  // your mapping: C=R, B=G, A=B (you measured it)
+  oled_data(r); // C
+  oled_data(g); // B
+  oled_data(b); // A
+}
+
+void oled_gac_fill_rect(uint8_t x0,uint8_t y0,uint8_t x1,uint8_t y1, uint8_t r,uint8_t g,uint8_t b){
+  CS_LOW();
+  oled_cmd(0x26); oled_data(0x01);  // fill enable
+  oled_cmd(0x22);
+  oled_data(x0); oled_data(y0);
+  oled_data(x1); oled_data(y1);
+  gac_color_rgb(r,g,b); // outline
+  gac_color_rgb(r,g,b); // fill
   CS_HIGH();
 }
