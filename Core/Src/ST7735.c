@@ -1,0 +1,192 @@
+#include "st7735.h"
+#include "fonts.h"
+//#include "stm32l4xx_hal.h"
+
+static SPI_HandleTypeDef *ST7735_hspi;
+static ST7735_TypeDef screen;
+
+static void ST7735_WriteCommand(uint8_t cmd)
+{
+    ST7735_DC_LOW();
+    ST7735_CS_LOW();
+    HAL_SPI_Transmit(ST7735_hspi, &cmd, 1, HAL_MAX_DELAY);
+    ST7735_CS_HIGH();
+}
+
+static void ST7735_WriteData(uint8_t data)
+{
+    ST7735_DC_HIGH();
+    ST7735_CS_LOW();
+    HAL_SPI_Transmit(ST7735_hspi, &data, 1, HAL_MAX_DELAY);
+    ST7735_CS_HIGH();
+}
+
+static void ST7735_Reset(void)
+{
+    ST7735_RST_LOW();
+    HAL_Delay(50);
+    ST7735_RST_HIGH();
+    HAL_Delay(50);
+}
+
+void ST7735_SetAddrWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+{
+    ST7735_WriteCommand(0x2A); // Column addr
+    ST7735_WriteData(0x00);
+    ST7735_WriteData(x0);
+    ST7735_WriteData(0x00);
+    ST7735_WriteData(x1);
+
+    ST7735_WriteCommand(0x2B); // Row addr
+    ST7735_WriteData(0x00);
+    ST7735_WriteData(y0);
+    ST7735_WriteData(0x00);
+    ST7735_WriteData(y1);
+
+    ST7735_WriteCommand(0x2C); // Write RAM
+}
+
+void ST7735_Init(SPI_HandleTypeDef *hspi)
+{
+    ST7735_hspi = hspi;
+    ST7735_Reset();
+    ST7735_WriteCommand(0x11);
+    HAL_Delay(120);
+    ST7735_WriteCommand(0x3A);
+    ST7735_WriteData(0x05);
+    ST7735_WriteCommand(0x29);
+    HAL_Delay(20);
+    ST7735_FillScreen(BLACK);
+}
+
+void ST7735_DrawPixel(uint16_t x, uint16_t y, const uint8_t color[2])
+{
+    if (x >= ST7735_WIDTH || y >= ST7735_HEIGHT)
+        return;
+
+    ST7735_SetAddrWindow(x, y, x+1, y+1);
+
+    ST7735_DC_HIGH();
+    ST7735_CS_LOW();
+    HAL_SPI_Transmit(ST7735_hspi, (uint8_t*)color, 2, HAL_MAX_DELAY);
+    ST7735_CS_HIGH();
+}
+
+void ST7735_FillScreen(uint16_t color)
+{
+    ST7735_SetAddrWindow(0, 0, ST7735_WIDTH-1, ST7735_HEIGHT-1);
+
+    uint8_t data[] = { color >> 8, color & 0xFF };
+
+    ST7735_DC_HIGH();
+    ST7735_CS_LOW();
+
+    for (uint32_t i = 0; i < ST7735_WIDTH * ST7735_HEIGHT; i++)
+        HAL_SPI_Transmit(ST7735_hspi, data, 2, HAL_MAX_DELAY);
+
+    ST7735_CS_HIGH();
+}
+
+void ST7735_DrawBlock(int x, int y, int size, uint16_t color) {
+	uint8_t data[] = { color >> 8, color & 0xFF };
+
+	ST7735_SetAddrWindow(x, y, x+size, y+size);
+	ST7735_DC_HIGH();
+	ST7735_CS_LOW();
+	for (int j = 0; j < size; j++) {
+	  for (int i = 0; i < size; i++) {
+		  HAL_SPI_Transmit(ST7735_hspi, data, 2, HAL_MAX_DELAY);
+	  }
+	}
+
+	ST7735_CS_HIGH();
+}
+
+
+char ST7735_WriteChar(char ch, FontDef Font, uint16_t color) {
+    uint32_t i, b, j;
+    uint8_t data[] = { color >> 8, color & 0xFF};
+    if (ST7735_WIDTH <= (screen.CurrentX + Font.width) ||
+    		ST7735_HEIGHT <= (screen.CurrentY + Font.height))
+    {
+        return 0;
+    }
+    for (i = 0; i < Font.height; i++)
+    {
+        b = Font.data[(ch - 32) * Font.height + i];
+        for (j = 0; j < Font.width; j++)
+        {
+            if ((b << j) & 0x8000)
+            {
+            	ST7735_DrawPixel(screen.CurrentX + j, (screen.CurrentY + i), data);
+            }
+            else
+            {
+            	ST7735_DrawPixel(screen.CurrentX + j, (screen.CurrentY + i), BLACK);
+            }
+        }
+    }
+    screen.CurrentX += Font.width;
+    return ch;
+}
+
+char ST7735_WriteString(const char* str, FontDef Font, uint16_t color)
+{
+    // Write until null-byte
+    while (*str)
+    {
+        if (ST7735_WriteChar(*str, Font, color) != *str)
+        {
+            // Char could not be written
+            return *str;
+        }
+        str++;
+    }
+    return *str;
+}
+
+void ST7735_SetCursor(uint8_t x, uint8_t y)
+{
+    screen.CurrentX = x;
+    screen.CurrentY = y;
+}
+
+void ST7735_SetRotation(uint8_t m)
+{
+  uint8_t madctl = 0;
+  uint8_t rotation = m & 3;
+
+  switch(rotation) {
+    case 0: madctl = ST7735_MADCTL_MX | ST7735_MADCTL_MY | ST7735_MADCTL_RGB; break;
+    case 1: madctl = ST7735_MADCTL_MY | ST7735_MADCTL_MV | ST7735_MADCTL_RGB; break;
+    case 2: madctl = ST7735_MADCTL_RGB; break;
+    case 3: madctl = ST7735_MADCTL_MX | ST7735_MADCTL_MV | ST7735_MADCTL_RGB; break;
+  }
+
+  ST7735_WriteCommand(ST7735_MADCTL);
+  ST7735_WriteData(madctl);   // send 1 byte
+}
+
+void ST7735_DrawFrame(uint16_t x, uint16_t y,
+                                 uint16_t w, uint16_t h,
+                                 const uint8_t *frame)
+{
+    if (!frame || w == 0 || h == 0) return;
+
+    ST7735_SetAddrWindow(x, y, x + w - 1, y + h - 1);
+
+    ST7735_DC_HIGH();
+    ST7735_CS_LOW();
+
+    size_t total = (size_t)w * (size_t)h * 2;
+
+    // Send in chunks so we don't blow up the HAL uint16_t length
+    while (total) {
+        uint16_t chunk = (total > 4096) ? 4096 : (uint16_t)total;
+        HAL_SPI_Transmit(ST7735_hspi, (uint8_t*)frame, chunk, HAL_MAX_DELAY);
+        frame += chunk;
+        total -= chunk;
+    }
+
+    ST7735_CS_HIGH();
+}

@@ -22,6 +22,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "oled.h"
+#include "ST7735.h"
+#include "fonts.h"
+#include "sprites.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,7 +48,7 @@ SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+extern const uint8_t happy_frame0[];
 
 static uint8_t rx_byte;
 static char line_buf[128];
@@ -95,7 +98,7 @@ static uint32_t focusedFlag = 0;
 static uint32_t menuFlag = 0;
 static uint32_t endFlag = 0;
 
-static uint32_t pet_health = 100;
+static float pet_health = 100;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -122,6 +125,75 @@ void time_count(uint32_t now){
 
 	last_ms = now;
 }
+void setMood(){
+	if (pet_health >= 70){
+		mood = HAPPY;
+	}
+	else if (pet_health < 70 && pet_health >= 30){
+		mood = NEUTRAL;
+	}
+	else if (pet_health < 30 && pet_health > 0){
+		mood = SAD;
+	}
+	else{
+		mood = DEAD;
+	}
+}
+
+void setAnim(){
+	if (anim == ANIMIDLE){
+		  ST7735_DrawFrame(35, 0, 64, 64, idle0);
+		  HAL_Delay(500);
+		  ST7735_DrawFrame(35, 0, 64, 64, idle1);
+		  HAL_Delay(500);
+	}
+	else if(anim == TRIGGERED){
+		  ST7735_DrawFrame(35, 0, 64, 64, trig0);
+		  HAL_Delay(500);
+		  ST7735_DrawFrame(35, 0, 64, 64, trig1);
+		  HAL_Delay(500);
+		  ST7735_DrawFrame(35, 0, 64, 64, trig0);
+		  HAL_Delay(500);
+		  ST7735_DrawFrame(35, 0, 64, 64, trig1);
+		  HAL_Delay(500);
+		  ST7735_DrawFrame(35, 0, 64, 64, trig0);
+		  HAL_Delay(500);
+		  ST7735_DrawFrame(35, 0, 64, 64, trig1);
+		  HAL_Delay(500);
+		  ST7735_DrawFrame(35, 0, 64, 64, trig0);
+		  HAL_Delay(500);
+		  ST7735_DrawFrame(35, 0, 64, 64, trig1);
+		  HAL_Delay(500);
+		  anim = DEFAULT;
+	}
+	else if (anim == DEFAULT){
+		if (mood == HAPPY){
+			  ST7735_DrawFrame(35, 0, 64, 64, happy0);
+			  HAL_Delay(1000);
+			  ST7735_DrawFrame(35, 0, 64, 64, happy1);
+			  HAL_Delay(500);
+		}
+		else if (mood == NEUTRAL){
+			  ST7735_DrawFrame(35, 0, 64, 64, neutral0);
+			  HAL_Delay(1000);
+			  ST7735_DrawFrame(35, 0, 64, 64, neutral1);
+			  HAL_Delay(500);
+		}
+		else if (mood == SAD){
+			  ST7735_DrawFrame(35, 0, 64, 64, sad0);
+			  HAL_Delay(500);
+			  ST7735_DrawFrame(35, 0, 64, 64, sad1);
+			  HAL_Delay(500);
+		}
+		else if (mood == DEAD){
+			  ST7735_DrawFrame(35, 0, 64, 64, dead0);
+			  HAL_Delay(500);
+			  ST7735_DrawFrame(35, 0, 64, 64, dead1);
+			  HAL_Delay(500);
+		}
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -158,6 +230,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+  ST7735_Init(&hspi1);
+ST7735_SetRotation(1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -170,6 +244,15 @@ int main(void)
 	  //buzzer testing
 //	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
 //	  HAL_Delay(1000);
+
+//	    ST7735_SetRotation(1);
+//	    ST7735_FillScreen(BLACK);
+//	    ST7735_SetCursor(5, 5);
+//	    ST7735_WriteString("ST7735 OK", Font_7x10, WHITE);
+//	    ST7735_SetCursor(5, 25);
+//	    ST7735_WriteString("RGB Bars:", Font_7x10, WHITE);
+//	    HAL_Delay(1000);
+
 
 	 	  //interrupt state changes handled here
 	 	  if (idleFlag){
@@ -252,11 +335,13 @@ int main(void)
 	  			             (unsigned long)distracted_episodes);
 	  			    HAL_UART_Transmit(&huart2, (uint8_t*)msg, (uint16_t)strlen(msg), HAL_MAX_DELAY);
 	  			    idlePrint = 1;
+	  			    anim = ANIMIDLE;
 	  		  }
 	  	  }
 
 	  	  if(state != IDLE){
 	  		  idlePrint = 0;
+	  		  anim = DEFAULT;
 	  	  }
 
 	  	  //MENU state
@@ -291,14 +376,11 @@ int main(void)
 	  	        	}
 	  	        } else if (!strcmp(line_buf, "DISTRACTED")) {
 	  	        	if(!in_distracted){
-
 	  		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=DISTRACTED\r\n", 18, HAL_MAX_DELAY);
-
-	  		        	if(!in_distracted){
-	  		        		distracted_episodes++;
-	  		        	}
+	  		        	distracted_episodes++;
 	  		        	state = DISTRACTED;
 	  		            in_distracted = 1;
+	  		            anim = TRIGGERED;
 	  	        	}
 	  	        } else {
 	  	            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=UNKNOWN\r\n", 15, HAL_MAX_DELAY);
@@ -309,10 +391,26 @@ int main(void)
 	  	 if (state == DISTRACTED){
 	  		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
 	  		HAL_Delay(500);
+	  		if (pet_health - 5 < 0){
+	  			pet_health = 0;
+	  		}
+	  		else{
+		  		pet_health -= 5;
+	  		}
 	  	 }
 	  	 else{
 	  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, 0);
+	  		if (pet_health + .5 >= 100){
+	  			pet_health = 100;
+	  		}
+	  		else{
+		  		pet_health += .5;
+	  		}
 	  	 }
+
+	  	 printf("health: %f\n\r", pet_health);
+	  	 setMood();
+	  	 setAnim();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -393,13 +491,13 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi1.Init.CRCPolynomial = 7;
   hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
   {
     Error_Handler();
@@ -464,7 +562,13 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9|GPIO_PIN_10, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -472,14 +576,21 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PC7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
   /*Configure GPIO pin : PA8 */
   GPIO_InitStruct.Pin = GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PA10 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10;
+  /*Configure GPIO pins : PA9 PA10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -489,6 +600,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
