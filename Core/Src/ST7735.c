@@ -87,14 +87,14 @@ void ST7735_FillScreen(uint16_t color)
     ST7735_CS_HIGH();
 }
 
-void ST7735_DrawBlock(int x, int y, int size, uint16_t color) {
+void ST7735_DrawBlock(int x, int y, int size0, int size1, uint16_t color) {
 	uint8_t data[] = { color >> 8, color & 0xFF };
 
-	ST7735_SetAddrWindow(x, y, x+size, y+size);
+	ST7735_SetAddrWindow(x, y, x+size0, y+size1);
 	ST7735_DC_HIGH();
 	ST7735_CS_LOW();
-	for (int j = 0; j < size; j++) {
-	  for (int i = 0; i < size; i++) {
+	for (int j = 0; j < size0; j++) {
+	  for (int i = 0; i < size1; i++) {
 		  HAL_SPI_Transmit(ST7735_hspi, data, 2, HAL_MAX_DELAY);
 	  }
 	}

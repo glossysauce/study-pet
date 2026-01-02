@@ -21,7 +21,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "oled.h"
 #include "ST7735.h"
 #include "fonts.h"
 #include "sprites.h"
@@ -99,6 +98,10 @@ static uint32_t menuFlag = 0;
 static uint32_t endFlag = 0;
 
 static float pet_health = 100;
+
+static uint8_t ui_dirty = 1;
+static State_t last_state = MENU;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -140,58 +143,152 @@ void setMood(){
 	}
 }
 
-void setAnim(){
-	if (anim == ANIMIDLE){
-		  ST7735_DrawFrame(35, 0, 64, 64, idle0);
-		  HAL_Delay(500);
-		  ST7735_DrawFrame(35, 0, 64, 64, idle1);
-		  HAL_Delay(500);
-	}
-	else if(anim == TRIGGERED){
-		  ST7735_DrawFrame(35, 0, 64, 64, trig0);
-		  HAL_Delay(500);
-		  ST7735_DrawFrame(35, 0, 64, 64, trig1);
-		  HAL_Delay(500);
-		  ST7735_DrawFrame(35, 0, 64, 64, trig0);
-		  HAL_Delay(500);
-		  ST7735_DrawFrame(35, 0, 64, 64, trig1);
-		  HAL_Delay(500);
-		  ST7735_DrawFrame(35, 0, 64, 64, trig0);
-		  HAL_Delay(500);
-		  ST7735_DrawFrame(35, 0, 64, 64, trig1);
-		  HAL_Delay(500);
-		  ST7735_DrawFrame(35, 0, 64, 64, trig0);
-		  HAL_Delay(500);
-		  ST7735_DrawFrame(35, 0, 64, 64, trig1);
-		  HAL_Delay(500);
-		  anim = DEFAULT;
-	}
-	else if (anim == DEFAULT){
-		if (mood == HAPPY){
-			  ST7735_DrawFrame(35, 0, 64, 64, happy0);
-			  HAL_Delay(1000);
-			  ST7735_DrawFrame(35, 0, 64, 64, happy1);
-			  HAL_Delay(500);
-		}
-		else if (mood == NEUTRAL){
-			  ST7735_DrawFrame(35, 0, 64, 64, neutral0);
-			  HAL_Delay(1000);
-			  ST7735_DrawFrame(35, 0, 64, 64, neutral1);
-			  HAL_Delay(500);
-		}
-		else if (mood == SAD){
-			  ST7735_DrawFrame(35, 0, 64, 64, sad0);
-			  HAL_Delay(500);
-			  ST7735_DrawFrame(35, 0, 64, 64, sad1);
-			  HAL_Delay(500);
-		}
-		else if (mood == DEAD){
-			  ST7735_DrawFrame(35, 0, 64, 64, dead0);
-			  HAL_Delay(500);
-			  ST7735_DrawFrame(35, 0, 64, 64, dead1);
-			  HAL_Delay(500);
-		}
-	}
+int stateChange = 0;
+int print = 0;
+void setAnim(void)
+{
+    if (state == MENU || state == END) {
+        ST7735_DrawFrame(18,10,100,26,text0);
+        HAL_Delay(200);
+        ST7735_DrawFrame(18,10,100,26,text1);
+        HAL_Delay(200);
+        ST7735_DrawFrame(18,10,100,26,text2);
+        HAL_Delay(200);
+        ST7735_DrawFrame(18,10,100,26,text1);
+        HAL_Delay(200);
+        return;
+    }
+
+    if (anim == ANIMIDLE) {
+        ST7735_DrawFrame(35, 0, 64, 64, idle0);
+        HAL_Delay(300);
+        ST7735_DrawFrame(35, 0, 64, 64, idle1);
+        HAL_Delay(300);
+        return;
+    }
+
+    if (anim == TRIGGERED && mood != DEAD) {
+        ST7735_DrawFrame(35, 0, 64, 64, trig0);
+        HAL_Delay(500);
+        ST7735_DrawFrame(35, 0, 64, 64, trig1);
+        HAL_Delay(200);
+        ST7735_DrawFrame(35, 0, 64, 64, trig0);
+        HAL_Delay(500);
+        ST7735_DrawFrame(35, 0, 64, 64, trig1);
+        HAL_Delay(200);
+        anim = DEFAULT;
+        return;
+    }
+
+    // DEFAULT
+    if (mood == HAPPY) {
+        ST7735_DrawFrame(35, 0, 64, 64, happy0);
+        HAL_Delay(1000);
+        ST7735_DrawFrame(35, 0, 64, 64, happy1);
+        HAL_Delay(500);
+    } else if (mood == NEUTRAL) {
+        ST7735_DrawFrame(35, 0, 64, 64, neutral0);
+        HAL_Delay(1000);
+        ST7735_DrawFrame(35, 0, 64, 64, neutral1);
+        HAL_Delay(500);
+    } else if (mood == SAD) {
+        ST7735_DrawFrame(35, 0, 64, 64, sad0);
+        HAL_Delay(200);
+        ST7735_DrawFrame(35, 0, 64, 64, sad1);
+        HAL_Delay(200);
+    } else { // DEAD
+        ST7735_DrawFrame(35, 0, 64, 64, dead0);
+        HAL_Delay(500);
+        ST7735_DrawFrame(35, 0, 64, 64, dead1);
+        HAL_Delay(500);
+    }
+}
+
+
+
+void printStats(void)
+{
+    if (state == MENU) {
+        if (!ui_dirty) return;
+        ST7735_FillScreen(BLACK);
+
+
+        ST7735_SetCursor(23, 65);
+        ST7735_WriteString("Click Button", Font_7x10, WHITE);
+        ST7735_SetCursor(38, 75);
+        ST7735_WriteString("to Begin!", Font_7x10, WHITE);
+
+        ui_dirty = 0;
+        return;
+    }
+
+    if (state == IDLE) {
+        if (!ui_dirty) return;
+        ST7735_FillScreen(BLACK);
+
+        char line[32];
+        ST7735_SetCursor(5, 65);
+        ST7735_WriteString("CURRENT STATS", Font_7x10, WHITE);
+
+        snprintf(line, sizeof(line), "FOCUSED=%lus", (unsigned long)(focused_ms/1000));
+        ST7735_SetCursor(5, 75);
+        ST7735_WriteString(line, Font_7x10, WHITE);
+
+        snprintf(line, sizeof(line), "DISTRACTED=%lus", (unsigned long)(distracted_ms/1000));
+        ST7735_SetCursor(5, 85);
+        ST7735_WriteString(line, Font_7x10, WHITE);
+
+        snprintf(line, sizeof(line), "EPISODES=%lu", (unsigned long)distracted_episodes);
+        ST7735_SetCursor(5, 95);
+        ST7735_WriteString(line, Font_7x10, WHITE);
+
+        ST7735_SetCursor(5, 105);
+        ST7735_WriteString("STUDYING PAUSED", Font_7x10, WHITE);
+
+        ui_dirty = 0;
+        return;
+    }
+
+    if (state == END) {
+        if (!ui_dirty) return;
+        ST7735_FillScreen(BLACK);
+
+        char line[32];
+        ST7735_SetCursor(5, 65);
+        ST7735_WriteString("CURRENT STATS", Font_7x10, WHITE);
+
+        snprintf(line, sizeof(line), "FOCUSED=%lus", (unsigned long)(focused_ms/1000));
+        ST7735_SetCursor(5, 75);
+        ST7735_WriteString(line, Font_7x10, WHITE);
+
+        snprintf(line, sizeof(line), "DISTRACTED=%lus", (unsigned long)(distracted_ms/1000));
+        ST7735_SetCursor(5, 85);
+        ST7735_WriteString(line, Font_7x10, WHITE);
+
+        snprintf(line, sizeof(line), "EPISODES=%lu", (unsigned long)distracted_episodes);
+        ST7735_SetCursor(5, 95);
+        ST7735_WriteString(line, Font_7x10, WHITE);
+
+        ST7735_SetCursor(5, 105);
+        ST7735_WriteString("SESSION END", Font_7x10, WHITE);
+
+        ui_dirty = 0;
+        return;
+    }
+
+    static int last_health_int = -1;
+    int health_int = (int)pet_health;
+    if (health_int != last_health_int || ui_dirty) {
+        last_health_int = health_int;
+        ST7735_DrawBlock(0, 64, 127, 74, BLACK);
+
+        char s[32];
+        snprintf(s, sizeof(s), "Health: %d", health_int);
+        ST7735_SetCursor(5, 64);
+        ST7735_WriteString(s, Font_7x10, WHITE);
+
+        ui_dirty = 0;
+    }
 }
 
 /* USER CODE END 0 */
@@ -231,7 +328,7 @@ int main(void)
 
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   ST7735_Init(&hspi1);
-ST7735_SetRotation(1);
+  ST7735_SetRotation(1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -279,8 +376,6 @@ ST7735_SetRotation(1);
 	 	  		printf("end\n\r");
 	 	  	  }
 
-
-
 	  	  uint32_t now = HAL_GetTick();
 	  	  //init
 	  	  if(last_ms == 0){
@@ -315,6 +410,8 @@ ST7735_SetRotation(1);
 	  		    HAL_UART_Transmit(&huart2, (uint8_t*)"SESSION RESET\r\n", 15, HAL_MAX_DELAY);
 	  		    endPrint = 1;
 	 // 		    endTrack = 1;
+	  		    print = 0;
+	  		    stateChange = 0;
 	  	  }
 
 	  	  if (state != END){
@@ -336,6 +433,8 @@ ST7735_SetRotation(1);
 	  			    HAL_UART_Transmit(&huart2, (uint8_t*)msg, (uint16_t)strlen(msg), HAL_MAX_DELAY);
 	  			    idlePrint = 1;
 	  			    anim = ANIMIDLE;
+	  			    print = 0;
+	  			    stateChange = 0;
 	  		  }
 	  	  }
 
@@ -355,6 +454,8 @@ ST7735_SetRotation(1);
 	  		     HAL_UART_Transmit(&huart2,(uint8_t*)"MENU\r\n",15,HAL_MAX_DELAY);
 	 // 		     state = FOCUSED;
 	  		     menuPrint = 1;
+	  		     print = 0;
+	  		   stateChange = 0;
 	  	  }
 
 	  	  if (state != MENU){
@@ -373,6 +474,8 @@ ST7735_SetRotation(1);
 	  		        	state = FOCUSED;
 	  		            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=FOCUSED\r\n", 15, HAL_MAX_DELAY);
 	  		            in_distracted = 0;
+	  		            print = 0;
+	  		          stateChange = 0;
 	  	        	}
 	  	        } else if (!strcmp(line_buf, "DISTRACTED")) {
 	  	        	if(!in_distracted){
@@ -381,6 +484,8 @@ ST7735_SetRotation(1);
 	  		        	state = DISTRACTED;
 	  		            in_distracted = 1;
 	  		            anim = TRIGGERED;
+	  		            print = 0;
+	  		          stateChange = 0;
 	  	        	}
 	  	        } else {
 	  	            HAL_UART_Transmit(&huart2, (uint8_t*)"STATE=UNKNOWN\r\n", 15, HAL_MAX_DELAY);
@@ -388,28 +493,38 @@ ST7735_SetRotation(1);
 	  	        line_len = 0;
 	  	  }
 
-	  	 if (state == DISTRACTED){
-	  		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
-	  		HAL_Delay(500);
-	  		if (pet_health - 5 < 0){
-	  			pet_health = 0;
-	  		}
-	  		else{
-		  		pet_health -= 5;
-	  		}
-	  	 }
-	  	 else{
-	  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, 0);
-	  		if (pet_health + .5 >= 100){
-	  			pet_health = 100;
-	  		}
-	  		else{
-		  		pet_health += .5;
-	  		}
-	  	 }
+	  	State_t prev = last_state;
+	  	if (state != prev) {
+	  	    if ((prev == MENU || prev == END) || (state == MENU || state == END)) {
+	  	        ST7735_FillScreen(BLACK);
+	  	      printf("STATE %d -> %d\r\n", prev, state);
+	  	    }
+	  	    ui_dirty = 1;
+	  	    last_state = state;
+	  	}
+	  	// -----------------------------------------------------------------------
 
-	  	 printf("health: %f\n\r", pet_health);
+
+	  	if (state != IDLE && state != MENU && state != END) {
+	  	    if (state == DISTRACTED) {
+	  	        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
+	  	        HAL_Delay(500);
+
+	  	        if (pet_health >= 5.0f) pet_health -= 5.0f;
+	  	        else pet_health = 0.0f;
+	  	    } else { // FOCUSED
+	  	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+
+	  	        if (pet_health <= 99.5f) pet_health += 0.5f;
+	  	        else pet_health = 100.0f;
+	  	    }
+	  	} else {
+	  	    // IDLE/MENU/END no health changes, but still allow UI + anim to run
+	  	    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+	  	}
+
 	  	 setMood();
+	  	 printStats();
 	  	 setAnim();
     /* USER CODE END WHILE */
 
@@ -667,7 +782,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	uint32_t button_now = HAL_GetTick();
 	//idle/break
     if (GPIO_Pin == GPIO_PIN_5) {
-    	if(button_now - last_pb5 > 50){
+    	if(button_now - last_pb5 > 100){
         	if(state != IDLE){
         		idleFlag = 1;
         	}
@@ -680,7 +795,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
     //start/stop session
     if (GPIO_Pin == GPIO_PIN_8) {
-    	if(button_now - last_pa8 > 50){
+    	if(button_now - last_pa8 > 100){
 			if(state == END){
 				menuFlag = 1;
 			}

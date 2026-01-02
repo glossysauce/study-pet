@@ -20,5 +20,7 @@ extern const uint8_t sad0[];
 extern const uint8_t sad1[];
 extern const uint8_t trig0[];
 extern const uint8_t trig1[];
-
+extern const uint8_t text0[];
+extern const uint8_t text1[];
+extern const uint8_t text2[];
 #endif /* SRC_SPRITES_H_ */
