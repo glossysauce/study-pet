@@ -398,13 +398,7 @@ int main(void)
 	  		    HAL_UART_Transmit(&huart2, (uint8_t*)msg, (uint16_t)strlen(msg), HAL_MAX_DELAY);
 
 
-	  		    //resetting
 
-	  		    focused_ms = 0;
-	  		    distracted_ms = 0;
-	  		    distracted_episodes = 0;
-	  		    in_distracted = 0;
-	  		    last_ms = HAL_GetTick();
 	 // 		    state = MENU;
 
 	  		    HAL_UART_Transmit(&huart2, (uint8_t*)"SESSION RESET\r\n", 15, HAL_MAX_DELAY);
