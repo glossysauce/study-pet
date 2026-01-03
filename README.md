@@ -27,7 +27,7 @@ This is a **fully solo project**. I designed, implemented, and integrated every 
 I noticed that I easily get distracted while studying without being aware how much time I can waste through little distractions that add up. I wanted a system that logs distraction episodes and time spent off-task, then reflects that behavior back to me through a simple virtual pet. My goal is awareness and behavior feedback as motivation, not perfect productivity. 
 
 ## Demo / UI
-work in progress
+[![Demo Video](https://img.youtube.com/vi/fctF_XBpPNI/0.jpg)](https://www.youtube.com/watch?v=fctF_XBpPNI)
 
 ## Hardware
 ### Circuit Schematic
